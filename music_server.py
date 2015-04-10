@@ -5,15 +5,16 @@ import sys, os, subprocess
 import threading
 import time
 
+# Subdirectory to look for music in.
+musicDir = 'music'
+
 class MusicPlayer(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
         # Extremely coarse-grained lock.
         self.lock = threading.Lock()
         self.songs_idx = 0;
-        self.songs = [
-            'Lionhearted (Arty Radio Edit).mp3'
-        ];
+        self.songs = filter(lambda s: s.endswith('.mp3'), os.listdir(musicDir))
         self.proc = None
         self.mpg123 = None
         self.running = True
@@ -28,14 +29,12 @@ class MusicPlayer(threading.Thread):
         fin, fout = os.popen4(["which", "mpg123"])
         self.mpg123 = fout.read().replace("\n", "")
         if not len(self.mpg123):
-            print "mpg123 is not installed"
+            print "error mpg123 not installed"
             return
 
-        print "Starting mpg123 daemon..."
         self.play()
 
     def stop(self):
-        print "Stopping daemon..."
         self.lock.acquire()
         self.running = False
         if self.proc is not None:
@@ -47,13 +46,7 @@ class MusicPlayer(threading.Thread):
         self.running = True
         while self.running:
             if self.proc is None:
-                song = self.getNextSong()
-
-                if not os.path.exists(song):
-                    print "File not found: %s" %  song
-                    continue
-
-                print "Playing " + song
+                song = os.path.join(musicDir, self.getNextSong())
                 self.proc = subprocess.Popen(
                     [self.mpg123, song],
                     shell = False,
@@ -67,9 +60,18 @@ class MusicPlayer(threading.Thread):
             time.sleep(0.5)
             self.lock.acquire()
 
-    def skipSong(self):
+    def nextSong(self):
         self.lock.acquire()
         if self.proc is not None:
+            os.kill(self.proc.pid, SIGTERM)
+        self.lock.release()
+
+    def prevSong(self):
+        self.lock.acquire()
+        self.songs_idx = \
+            (self.songs_idx + len(self.songs) - 1) % len(self.songs)
+        if self.proc is not None:
+            self.songs_idx -= 1
             os.kill(self.proc.pid, SIGTERM)
         self.lock.release()
 
@@ -77,7 +79,7 @@ musicPlayer = MusicPlayer()
 musicPlayer.start()
 
 while True:
-    command = raw_input('Command: ')
+    command = raw_input()
     if command == 'quit':
         musicPlayer.stop()
         break
@@ -87,5 +89,8 @@ while True:
         musicPlayer = MusicPlayer()
     elif command == 'play':
         musicPlayer.start()
-    elif command == 'skip':
-        musicPlayer.skipSong()
+    elif command == 'next':
+        musicPlayer.nextSong()
+    elif command == 'prev':
+        musicPlayer.prevSong()
+
