@@ -48,7 +48,7 @@ class MusicPlayer(threading.Thread):
             if self.proc is None:
                 song = os.path.join(musicDir, self.getNextSong())
                 self.proc = subprocess.Popen(
-                    [self.mpg123, song],
+                    [self.mpg123, song, '-r', '48000'],
                     shell = False,
                     stdout = subprocess.PIPE,
                     stderr = subprocess.PIPE
