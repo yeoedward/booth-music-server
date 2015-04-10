@@ -1,12 +1,16 @@
 # Inspired by https://pypi.python.org/pypi/jukebox-mpg123
 
 from signal import SIGTSTP, SIGTERM, SIGABRT
+import pty
 import sys, os, subprocess
 import threading
 import time
 
 # Subdirectory to look for music in.
 musicDir = 'music'
+
+# The higher it is, the faster volume changes for each 'volume +/-' command.
+volumeChangeMultiplier = 5
 
 def mod_inc(val, mod):
     return (val + 1) % mod
@@ -26,6 +30,8 @@ class MusicPlayer(threading.Thread):
         self.mpg123 = None
         self.running = True
         self.stopped = False
+        self.masterPty = None
+        self.slavePty = None
 
     def getNextSong(self):
         nextSong = self.songs[self.song_idx];
@@ -34,10 +40,8 @@ class MusicPlayer(threading.Thread):
     
     def stopPlayingSong(self):
         if self.proc is not None:
-            if self.proc.poll() is None:
-                os.kill(self.proc.pid, SIGTERM)
-            else:
-                self.proc = None
+            self.proc.terminate()
+            self.proc = None
 
     def run(self):
         # Check if mpg123 is available
@@ -61,11 +65,14 @@ class MusicPlayer(threading.Thread):
             if not self.stopped:
                 if self.proc is None:
                     song = os.path.join(musicDir, self.getNextSong())
+                    DEVNULL = open(os.devnull, 'w')
+                    self.masterPty, self.slavePty = pty.openpty()
                     self.proc = subprocess.Popen(
-                        [self.mpg123, song, '-r', '48000'],
+                        [self.mpg123, '-C', '-r', '48000', song],
                         shell = False,
-                        stdout = subprocess.PIPE,
-                        stderr = subprocess.PIPE
+                        stdout = DEVNULL,
+                        stderr = DEVNULL,
+                        stdin = self.slavePty
                     )
                 else:
                     if self.proc.poll() is not None:
@@ -111,6 +118,14 @@ class MusicPlayer(threading.Thread):
         self.stopped = False
         self.lock.release()
 
+    def volume(self, change):
+        assert change == '+' or change == '-'
+        self.lock.acquire()
+        if self.proc is not None:
+            for _ in xrange(volumeChangeMultiplier):
+                os.write(self.masterPty, change)
+        self.lock.release()
+
 musicPlayer = MusicPlayer()
 musicPlayer.start()
 
@@ -131,9 +146,15 @@ while True:
         try:
             song_idx = int(command[len('goto '):])
         except:
-            print "error The command goto should be followed by a number."
+            print 'error The command goto should be followed by a number.'
             continue
         if not musicPlayer.gotoSong(song_idx):
-            print "error Song number is out of range."
+            print 'error Song number is out of range.'
+    elif command.startswith('volume '):
+        change = command[len('volume '):]
+        if change == '+' or change == '-':
+            musicPlayer.volume(change)
+        else:
+            print 'error Command should be "volume +" or "volume -"'
     else:
-        print "error Invalid command."
+        print 'error Invalid command.'

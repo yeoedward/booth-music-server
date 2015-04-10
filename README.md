@@ -4,7 +4,7 @@ executing.
 Commands (self-explanatory):
 
 ```
-play, stop, next, prev, quit, goto <song number>
+play, stop, next, prev, quit, goto <song number>, volume <+/->
 ```
 
 If there is an error, the format of the output of this script is:
