@@ -21,6 +21,7 @@ class MusicPlayer(threading.Thread):
         self.lock = threading.Lock()
         self.song_idx = 0;
         self.songs = filter(lambda s: s.endswith('.mp3'), os.listdir(musicDir))
+        self.songs.sort()
         self.proc = None
         self.mpg123 = None
         self.running = True
